@@ -23,14 +23,20 @@ def upload_livecell(conn, args):
 
 
 def connect_annotations(conn, image_id, args, collection_id=None):
-    namespace = "ome/collection/"
+    namespace = "ome/collection/nodes"
 
     d = {
+        "version": "0.0.1",
         "collection_name": "livecell",
         "collection_type": "dummy_collection",
     }
-    if collection_id:
+
+    if collection_id:  # i.e. it is a label image.
         d["collection_id"] = f"{collection_id}"
+        d["type"] = "label"
+        d["attributes"] = {"class_labels": "cells"}
+    else:  # Otherwise the raw image.
+        d["type"] = "intensity"
 
     image = conn.getObject("Image", image_id)
 
@@ -54,7 +60,7 @@ def connect_annotations(conn, image_id, args, collection_id=None):
 
 
 def read_information(conn, image_id, args):
-    ns = "ome/collection/"
+    ns = "ome/collection/nodes"
     image = conn.getObject("Image", image_id)
 
     anns = list(image.listAnnotations(ns=ns))
@@ -65,15 +71,32 @@ def read_information(conn, image_id, args):
         print(kv_dict)
 
 
+def delete_annotations(conn, image_id):
+    # ns = "ome/collection/"
+    ns = "ome/collection/nodes"
+    image = conn.getObject("Image", image_id)
+
+    anns = list(image.listAnnotations(ns=ns))
+
+    fanns = []
+    for ann in anns:
+        kv_dict = {k: v for k, v in ann.getValue()}
+        print("Annotation ID:", ann.getId())
+        print(kv_dict)
+        fanns.append(ann.getId())
+
+    conn.deleteObjects("Annotation", fanns, wait=True)
+
+
 def main():
     parser = omero_credential_parser()
     args = parser.parse_args()
 
     conn = connect_to_omero(args)
 
-    upload_livecell(conn, args)
+    # upload_livecell(conn, args)
 
-    # Scripts to drop metadata.
+    # # Scripts to drop metadata.
     raw_id = 35394  # The available LIVECell image on the OMERO server.
     label_id = 35395  # The corresponding labels image for LIVECell on the OMERO server.
     collection_id = connect_annotations(conn, raw_id, args)
@@ -82,6 +105,8 @@ def main():
     # Read information for the current image id.
     read_information(conn, raw_id, args)
     read_information(conn, label_id, args)
+
+    # delete_annotations(conn, label_id)
 
     conn.close()
 
