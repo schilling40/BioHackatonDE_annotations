@@ -1,5 +1,6 @@
 import imageio.v3 as imageio
 
+from omero.sys import ParametersI
 from omero.gateway import MapAnnotationWrapper
 
 from omero_utils import omero_credential_parser, connect_to_omero
@@ -33,9 +34,10 @@ def connect_annotations(conn, image_id, args, collection_id=None):
 
     if collection_id:  # i.e. it is a label image.
         d["collection_id"] = f"{collection_id}"
-        d["type"] = "label"
+        d["image_type"] = "labels"
         d["attributes"] = {"class_labels": "cells"}
     else:  # Otherwise the raw image.
+        d["image_type"] = "raw"
         d["type"] = "intensity"
 
     image = conn.getObject("Image", image_id)
@@ -45,7 +47,8 @@ def connect_annotations(conn, image_id, args, collection_id=None):
     map_ann.setNs(namespace)
 
     # setValue expects a list of (name, value) pairs
-    map_ann.setValue(list(d.items()))
+    kv_list = [(k, str(v)) for k, v in d.items()]
+    map_ann.setValue(kv_list)
 
     # Save the annotation object
     map_ann.save()
@@ -53,8 +56,14 @@ def connect_annotations(conn, image_id, args, collection_id=None):
     # Link the annotation to the image
     image.linkAnnotation(map_ann)
 
-    if collection_id is None:
-        annotation_id = map_ann.getId()
+    annotation_id = map_ann.getId()
+    if collection_id is None:  # i.e. still the raw image.
+        # Here, we finalize the collection id.  Let's go ahead with adding it to the raw image too.
+        d["collection_id"] = f"{annotation_id}"
+        kv_list = [(k, str(v)) for k, v in d.items()]
+        map_ann.setValue(kv_list)
+        map_ann.save()
+
         print("Created MapAnnotation with ID:", annotation_id)
         return annotation_id
 
@@ -72,8 +81,8 @@ def read_information(conn, image_id, args):
 
 
 def delete_annotations(conn, image_id):
-    # ns = "ome/collection/"
-    ns = "ome/collection/nodes"
+    ns = "ome/collection/"
+    # ns = "ome/collection/nodes"
     image = conn.getObject("Image", image_id)
 
     anns = list(image.listAnnotations(ns=ns))
@@ -88,6 +97,65 @@ def delete_annotations(conn, image_id):
     conn.deleteObjects("Annotation", fanns, wait=True)
 
 
+def _find_images_with_collection_id_in_dataset(conn, namespace, collection_id, dataset_id, limit=None):
+    dataset = conn.getObject("Dataset", dataset_id)
+    if dataset is None:
+        print(f"Dataset {dataset_id} not found")
+        return []
+
+    collection_id = str(collection_id)
+    images = []
+    for i, img in enumerate(dataset.listChildren()):
+        if limit is not None and i >= limit:
+            break
+
+        anns = list(img.listAnnotations(ns=namespace))
+        for ann in anns:
+            kv = {k: v for k, v in ann.getValue()}
+            if kv.get("collection_id") == collection_id:
+                images.append((img.getId(), img.getName(), ann.getId()))
+                print(
+                    f"Match: Image ID={img.getId()}, "
+                    f"Name='{img.getName()}', "
+                    f"Annotation ID={ann.getId()}"
+                )
+                # if you expect max one annotation per image, you can break here
+                break
+
+    print(f"Found {len(images)} images with collection_id={collection_id} in dataset {dataset_id}")
+    return images
+
+
+def load_omero_labels_in_napari(conn, image_id):
+    # NOTE: namespace seems like a random entity atm. Is there a convention behind it?
+    ns = "ome/collection/nodes"
+    image = conn.getObject("Image", image_id)
+
+    # HACK: I will assume that there is one collection only and find the "annotation_id" for it
+    anns = list(image.listAnnotations(ns=ns))
+    assert len(anns) == 1
+    annotation_id = anns[0].getId()
+    print("Raw image collection annotation_id:", annotation_id)
+
+    # Get the dataset of this image to limit the search
+    dataset = image.getParent()
+    if dataset is None:
+        raise RuntimeError("Image has no parent dataset; adjust search scope.")
+
+    dataset_id = dataset.getId()
+    print("Searching in dataset", dataset_id)
+
+    matches = _find_images_with_collection_id_in_dataset(
+        conn, namespace=ns, collection_id=annotation_id, dataset_id=dataset_id,
+    )
+
+    # Let's do a simple filtering
+    label_candidates = [m for m in matches if m[0] != image_id]
+    print("Label candidates:", label_candidates)
+
+    breakpoint()
+
+
 def main():
     parser = omero_credential_parser()
     args = parser.parse_args()
@@ -96,17 +164,20 @@ def main():
 
     # upload_livecell(conn, args)
 
-    # # Scripts to drop metadata.
+    # Scripts to drop metadata.
     raw_id = 35394  # The available LIVECell image on the OMERO server.
     label_id = 35395  # The corresponding labels image for LIVECell on the OMERO server.
-    collection_id = connect_annotations(conn, raw_id, args)
-    connect_annotations(conn, label_id, args, collection_id=collection_id)
+    # collection_id = connect_annotations(conn, raw_id, args)
+    # connect_annotations(conn, label_id, args, collection_id=collection_id)
 
     # Read information for the current image id.
-    read_information(conn, raw_id, args)
-    read_information(conn, label_id, args)
+    # read_information(conn, raw_id, args)
+    # read_information(conn, label_id, args)
 
-    # delete_annotations(conn, label_id)
+    delete_annotations(conn, raw_id)
+    delete_annotations(conn, label_id)
+
+    # load_omero_labels_in_napari(conn, raw_id)
 
     conn.close()
 
