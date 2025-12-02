@@ -91,20 +91,7 @@ RFC-8 defines collections as structured containers for grouping related data. Fo
 
 ### 1. Mapping Collections to OMERO Objects
 
-Possible implementation options include:
-
-* Represent label collections as:
-
-  * OMERO Projects
-  * OMERO Datasets
-  * Or a new custom collection type
-
-Each option will be evaluated for:
-
-* Query efficiency
-* Permission handling
-* UI compatibility
-* API accessibility
+We recommend creating a new custom collection type because *OMERO Projects* and *OMERO Datasets* are already established concepts, which limits their adaptability for this use case.
 
 ### 2. Linking via Key-Value Annotations
 
