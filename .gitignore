@@ -4,3 +4,10 @@
 
 # Environment variables
 .env
+
+# And other random package stuff
+__pycache__/
+*.egg-info/
+
+# Example images
+samples/*
