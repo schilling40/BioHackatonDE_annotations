@@ -1576,7 +1576,7 @@ packages:
 - pypi: ./
   name: biohack-utils
   version: 0.0.1
-  sha256: a6b2834fca1db6fdd03e061deccfaa3b7c4f41ef0ae074bf400a1d8ec8177eca
+  sha256: ceaa8c0166322c70cb8ad94748456f1a6bf7e7d0f0d9f1962b116ff3c3a36092
   editable: true
 - conda: https://conda.anaconda.org/conda-forge/noarch/bioimageio.core-0.9.5-pyhd8ed1ab_0.conda
   sha256: 6f591e80eaa5a88c204616f3eede7771b99d95d59779be9ac03aea4020385111
