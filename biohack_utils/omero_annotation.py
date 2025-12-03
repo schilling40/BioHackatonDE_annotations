@@ -70,7 +70,8 @@ def _add_node_annotation(
     """
     kv = {
         "type": node_type,
-        "collection_id": str(collection_ann_id),
+        "collection_id": str(collection_ann_id)
+        
     }
     if node_name:
         kv["name"] = node_name
