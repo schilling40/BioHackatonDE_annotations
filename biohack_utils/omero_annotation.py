@@ -141,6 +141,9 @@ def _add_node_annotation(
     image.linkAnnotation(ann)
     return ann.getId()
 
+    ann = _create_map_annotation(conn, kv, NS_NODE)
+    image.linkAnnotation(ann)
+    return ann.getId()
 
 def _get_collection_members(conn, collection_ann_id):
     """Get all images linked to a collection annotation.
@@ -223,23 +226,10 @@ def _find_related_images(conn, image_id, node_type=None):
     return related
 
 
-def _omero_image_to_array(img, z=None, c=0, t=0):
+def _omero_image_to_2d_array(img, z=0, c=0, t=0):
     pixels = img.getPrimaryPixels()
-
-    if z is None:
-        size_z = img.getSizeZ()
-        # Build list of (z, c, t) for the whole stack
-        zct_list = [(zz, c, t) for zz in range(size_z)]
-
-        # Call each plane in bulk (maybe it's faster?)
-        planes_gen = pixels.getPlanes(zct_list)
-
-        # Let's convert the generator into arrays.
-        planes = list(planes_gen)
-        volume = np.stack(planes, axis=0)
-        return volume
-    else:  # Single plane is fine via getPlane I guess?
-        return pixels.getPlane(z, c, t)
+    plane = pixels.getPlane(z, c, t)
+    return np.asarray(plane)
 
 
 def _find_images_with_collection_id_in_dataset(
@@ -249,7 +239,8 @@ def _find_images_with_collection_id_in_dataset(
     node_type=None,
     limit=None,
 ):
-    """Find images in a given dataset that are members of a collection
+    """
+    Find images in a given dataset that are members of a collection
     (identified by collection_id) and optionally have a given node_type.
 
     Returns a list of tuples:
@@ -296,9 +287,7 @@ def _find_images_with_collection_id_in_dataset(
     return images
 
 
-def fetch_omero_labels_in_napari(
-    conn, image_id, return_raw=False, label_node_type="Labels", is_3d=False,
-):
+def fetch_omero_labels_in_napari(conn, image_id, return_raw=False, label_node_type="Labels"):
     """Fetch label data for a given raw image using collections/nodes.
 
     Returns the raw and label array data.
@@ -326,7 +315,7 @@ def fetch_omero_labels_in_napari(
             if mid == image_id:
                 continue
 
-            # Filter by node type, eg. "Labels"
+            # Filter by node type, e.g. "Labels"
             if label_node_type is not None and node_info.get("type") != label_node_type:
                 continue
 
@@ -341,13 +330,12 @@ def fetch_omero_labels_in_napari(
             from napari_omero.plugins.loaders import get_data_lazy
             label_array = get_data_lazy(img)
 
-            # label_array = _omero_image_to_array(img, z=None if is_3d else 0, c=0, t=0)
             labels_dict[node_name] = label_array
 
     if not labels_dict:
         return labels_dict
 
-    raw_data = _omero_image_to_array(raw_img, z=None if is_3d else 0, c=0, t=0)
+    raw_data = _omero_image_to_2d_array(raw_img, z=0, c=0, t=0)
 
     if return_raw:
         return raw_data, labels_dict

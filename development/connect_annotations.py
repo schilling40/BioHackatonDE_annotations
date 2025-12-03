@@ -81,7 +81,7 @@ def main():
     # write_annotations_to_image_and_labels(conn, raw_id, label_id)
 
     # Loading existing stuff.
-    load_omero_labels_in_napari(conn, raw_id, is_3d=False)
+    load_omero_labels_in_napari(conn, raw_id)
 
     conn.close()
 
