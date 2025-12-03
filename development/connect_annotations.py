@@ -2,17 +2,30 @@ from biohack_utils.util import omero_credential_parser, connect_to_omero
 from biohack_utils import omero_annotation
 
 
-def load_omero_labels_in_napari(conn, image_id):
+def load_omero_labels_in_napari(conn, image_id, is_3d=False):
+    id_was_a_list = isinstance(image_id, list)
+    if isinstance(image_id, list):  # If it's a list, only check one image.
+        image_id = image_id[0]
+
     from biohack_utils.omero_annotation import fetch_omero_labels_in_napari
 
-    raw_data, label_dict = fetch_omero_labels_in_napari(conn, image_id, return_raw=True)
+    raw_data, label_dict = fetch_omero_labels_in_napari(
+        conn, image_id, return_raw=True, is_3d=is_3d, label_node_type="Labels"
+    )
+
+    if id_was_a_list:
+        # Well the assumption is there are multiple images. So, gotta catch them all.
+        ldict = fetch_omero_labels_in_napari(
+            conn, image_id, return_raw=False, is_3d=is_3d, label_node_type="Intensities"
+        )
+        label_dict = {**label_dict, **ldict}
 
     # Say hello to napari.
     import napari
     v = napari.Viewer()
     v.add_image(raw_data, blending="additive")
     for key, val in label_dict.items():
-        v.add_labels(val, name=key)
+        v.add_image(val, name=key)
     napari.run()
 
 
@@ -20,17 +33,25 @@ def write_annotations_to_image_and_labels(conn, image_id, label_id):
     # Creates a new collection based on label images.
     ann_id = omero_annotation._create_collection(conn, "cells", "0.0.1")
 
-    # Links the collection to the raw image.
-    omero_annotation._link_collection_to_image(conn, ann_id, image_id)
+    if isinstance(image_id, int):
+        image_id = [image_id]
 
-    # Add node annotations to the raw image
-    omero_annotation._add_node_annotation(conn, image_id, "Intensities", ann_id, "Raw")
+    for curr_iid in image_id:  # Links multiple image ids.
+        # Links the collection to the raw image.
+        omero_annotation._link_collection_to_image(conn, ann_id, curr_iid)
+        # Add node annotations to the raw image
+        omero_annotation._add_node_annotation(conn, curr_iid, "Intensities", ann_id, "Raw")
 
     # Links the collection to the label image.
     omero_annotation._link_collection_to_image(conn, ann_id, label_id)
-
     # Add node annotation to the label image.
     omero_annotation._add_node_annotation(conn, label_id, "Labels", ann_id, "Cell_Segmentation")
+
+    # Finally, let's build a pseudo-network by linking all links.
+    all_image_ids = image_id + [label_id]
+    for iid in all_image_ids:
+        link = omero_annotation._build_image_url(iid)
+        omero_annotation._append_link_to_node_annotation(conn, iid, link)
 
 
 def main():
@@ -41,8 +62,20 @@ def main():
 
     # Scripts to drop metadata.
 
-    # TODO: Check Martin's volume.
-    # raw_id = 35494
+    # 1. For LIVECell (2d)
+    raw_id = 35394  # The available LIVECell image on the OMERO server.
+    label_id = 35395  # The corresponding labels image for LIVECell on the OMERO server.
+
+    # 2. For CochleaNet (3d)
+    # raw_id = 35499
+    # label_id = 35500
+
+    # 3. For multi-label images (2d)
+    # raw_id = 35478
+
+    # 4. For CovidIF HCS data (2d)
+    # raw_id = [35501, 35502]
+    # label_id = 35503
 
     # Writes annotations in expected format.
     # write_annotations_to_image_and_labels(conn, raw_id, label_id)
