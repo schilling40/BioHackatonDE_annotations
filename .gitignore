@@ -8,3 +8,10 @@
 # And other random package stuff
 __pycache__/
 *.egg-info/
+
+# Example images
+samples/*
+
+# Python cache
+__pycache__/
+*egg-info/
